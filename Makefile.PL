@@ -8,13 +8,13 @@ my $module = $& .'.pm';
 # See lib/ExtUtils/MakeMaker.pm for details of how to influence
 # the contents of the Makefile that is written.
 
-WriteMakefile(
+my %makeparms = (
     'NAME'		=> $pkg,
     'VERSION_FROM'	=> $module, # finds $VERSION
     'PREREQ_PM'		=> {	Net::DNS::Codes		=> 0.08,
 				Net::DNS::ToolKit	=> 0.24,
 				Unix::Syslog		=> 0.97,
-				Net::NBsocket		=> 0.11,
+				Net::NBsocket		=> 0.12,
 				Proc::PidUtil		=> 0.07,
 				Sys::Hostname::FQDN	=> 0.07,
 			},
@@ -44,3 +44,4 @@ README  : |. $module .q|
 |;
 }
 
+WriteMakefile(%makeparms);

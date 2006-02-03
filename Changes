@@ -1,5 +1,8 @@
 Revision history for Perl extension Wed Feb  1 21:47:48 PST 2006
 
+0.02  Wed Feb  1 22:22:02 PST 2006
+	oops! forgot to comment out #use diagnostics;
+
 0.01  Tue Jan 24 10:49:10 PST 2006
 	initial release
 
