@@ -72,7 +72,7 @@ require Exporter;
 
 @ISA = qw(Exporter);
 
-$VERSION = do { my @r = (q$Revision: 0.02 $ =~ /\d+/g); sprintf "%d."."%02d" x $#r, @r };
+$VERSION = do { my @r = (q$Revision: 0.03 $ =~ /\d+/g); sprintf "%d."."%02d" x $#r, @r };
 
 @EXPORT = qw(
 	run_honeypot
@@ -82,7 +82,7 @@ $VERSION = do { my @r = (q$Revision: 0.02 $ =~ /\d+/g); sprintf "%d."."%02d" x $
 
 my($me,$threads,$dns,$dnshost,$dnsport,$dnsaddr,$deny,$hostname,$laddr,
    $port,$delay,$config,$syslog,$verbose,$DNStimeout,$maxthreads,$maxcmds,
-   $LOG,$DNSfileno,$disconnect,%Commands,$unique
+   $LOG,$DNSfileno,$disconnect,%Commands,$unique,$log_facility
 );
 my $CRLF	= "\r\n";
 
@@ -119,14 +119,14 @@ primary mail host for a domain. In the off chance that a real message is
 sent to the server, the TEMPORARY failure code will simply make the sending
 host retry later -- probably with the lower priority numbered host.
 Meanwhile, the server target by the spam source has its resources consumed
-by B<spamdeny>.
+by B<honeypot>.
 
 Honeypot does not spawn children and holds only a small reference to each
 thread that it holds to a client, thus consuming minimal resources. It can
 produce logs useful in analyzing the spam traffic to your site. Using it
 with a detach in CONN mode is adequate for triggering a companion spam
 program such as Mail::SpamCannibal while consuming minimum host resources.
-At our site, we simply run B<spamdeny> on the same host as our secondary MX
+At our site, we simply run B<honeypot> on the same host as our secondary MX
 but on a different IP address.
 
 Honeypot provides various levels of connection and transaction logging that
@@ -137,7 +137,7 @@ from the server daemon to slow down the sending client.
 
 =head1 CONFIGURATION
 
-Edit the B<rc.spamdeny> file to change or set the following:
+Edit the B<rc.honeypot.pl> file to change or set the following:
 
   my $config = {
 
@@ -170,6 +170,10 @@ Edit the B<rc.spamdeny> file to change or set the following:
   #
   #	port		=> 25,
 
+  ## NOTE: 	see Concurrent Daemon Operation in the
+  ##		documentation for setup where another
+  ##		mail daemon is running on the same host.
+  
   # specify the response delay after connect or upon
   # receipt of an smtp command from the client
   #
@@ -181,6 +185,17 @@ Edit the B<rc.spamdeny> file to change or set the following:
   #
   #	delay		=> 45,
 
+  # syslog facility, one of:
+  #	LOG_KERN LOG_USER LOG_MAIL LOG_DAEMON
+  #	LOG_AUTH LOG_SYSLOG LOG_LPR LOG_NEWS
+  #	LOG_UUCP LOG_CRON LOG_AUTHPRIV LOG_FTP
+  #	LOG_LOCAL0 LOG_LOCAL1 LOG_LOCAL2 LOG_LOCAL3
+  #	LOG_LOCAL4 LOG_LOCAL5 LOG_LOCAL6 LOG_LOCAL7
+  #
+  # You should not need to change this
+  #
+  #	log_facility	=> 'LOG_MAIL',
+
   # syslog log level or (none), one of:
   #	STDERR LOG_EMERG LOG_ALERT LOG_CRIT LOG_ERR
   #	LOG_WARNING LOG_NOTICE LOG_INFO LOG_DEBUG
@@ -189,7 +204,7 @@ Edit the B<rc.spamdeny> file to change or set the following:
   #		this and sets the level to STDERR
   # [optional]
   #
-	syslog		=> 'LOG_INFO',
+	syslog		=> 'LOG_WARNING',
 
   # log verbosity
   #	0 connect only
@@ -237,24 +252,119 @@ Edit the B<rc.spamdeny> file to change or set the following:
 
 Launch the daemon with the command:
 
-	rc.spamdeny [-d] [start | stop | restart]
+	rc.honeypot.pl [-d] [start | stop | restart]
 
 The '-d' flag, this overides the config settings and
 reports logging to STDERR
 
-On some systems it may be necessary to wrap a shell script around spam deny
-if the path for perl is not in scope during boot.
+On some systems it may be necessary to wrap a shell script around
+rc.honeypot.pl if the path for perl is not in scope during boot.
 
   #!/bin/sh
-  /usr/bin/perl $*
+  #
+  # shell script 'rc.honeypot'
+  #
+  /path/to/rc.honeypot.pl $*
+
+A sample shell script is included in the distribution as B<rc.honeypot>
+
+NOTE: suggest you test your configuration as follows...
+
+  Set:	verbose	=> 3,
+	delay	=> 5,
+
+  ./rc.honeypot -d start
+
+Connect to the daemon from a host not on the same subnet and watch the
+output from daemon to verify proper operation.
+
+Correct the configuration values and ENJOY!
+
+=head2 Standalone Operation
+
+For operation on a host where B<Mail::SMTP::Honeypot> is the only SMTP
+daemon, the default configuration will work for most installations.
+
+=head2 Concurrent Daemon Operation
+
+To operate B<Mail::SMTP::Honeypot> concurrently with another mail daemon on
+the same host you must do the following:
+
+=item B<1)> add a virtual IP address for the daemon to answer.
+The IP address in the rc.honeypot.pl config section should be left 
+commented out so that the daemon will bind to INADDR_ANY.
+
+In your startup sequence, execute the following: (example for Linux)
+
+  #/bin/sh
+  #
+  # Edit for your setup.
+  NETMASK="255.255.255.0"	# REPLACE with YOUR netmask!
+  NETWORK="5.6.7.0"		# REPLACE with YOUR network address!
+  BROADCAST="5.6.7.255"		# REPLACE with YOUR broadcast address
+  # assign a virtual IP address
+  IPADDR="5.6.7.8"
+
+  # assign ethernet device
+  DEVICE="eth0"			# REPLACE with your external device
+  LUN="0"
+
+  # Note:	the "real" IP address has no LUN
+  #		virtual IP's are assigned LUN's starting with '0'
+  #
+  # i.e.	host IP = 5.6.7.1	eth0
+  # virtIP	5.6.7.8		LUN 0	eth0:0
+  # virtIP	5.6.7.9		LUN 1	eth0:1
+
+  IFACE=${DEVICE}:${LUN}
+  /sbin/ifconfig ${IFACE} ${IPADDR} broadcast ${BROADCAST} netmask ${NETMASK}
+  /sbin/route add ${IPADDR} dev ${IFACE}
+  echo Configuring $IFACE as $IPADDR
+
+=item B<2)> run the honeypot daemon on an unused port.
+
+Select a high port number that will not interfere with normail operation of
+the host SMTP daemon or other services on the host.
+
+  i.e.	in the config section of rc.honeypot.pl
+
+	port	=> 10025,
+
+=item B<3)> add packet filter rules to redirect queries.
+
+This example is for IPTABLES on Linux. Similar rules would apply for other
+filter packages.
+
+  # allowed chain for TCP connections
+  iptables -N allowed
+  iptables -A allowed -p tcp --syn -j ACCEPT
+  iptables -A allowed -p tcp -m state --state ESTABLISHED,RELATED -j ACCEPT
+  iptables -A allowed -p tcp -j DROP
+
+  # drop all external packets target on honeypot daemon
+  iptables -t nat -A PREROUTING -p tcp -s 0/0 --dport 10025 -j DROP
+  iptables -t nat -A PREROUTING -p tcp -d 5.6.7.8 --dport 25 -j REDIRECT --to-port 10025
+  # alternate DNAT statement
+  # iptables -t nat -a PREROUTING -p tcp -d 5.6.7.8 --dport 25 -j DNAT --to 5.6.7.8:10025
+
+  ## if you are running SpamCannibal, add this rule to capture IP's of connecting hosts
+  ## iptables -A INPUT -p tcp -i eth0 --dport 10025 -j QUEUE
+
+  # allow the internal port to connect
+  iptables -A INPUT -p tcp -s 0/0 --dport 10025 -j allowed
+
+=head1 EXPORTS
+
+Only one function is exported by Honeypot.pm. This function is called in the
+rc.honeypot.pl.sample script to launch the B<honeypot> daemon.
 
 =over 4
 
 =item * run_honeypot($config); # with @ARGV
 
-The only EXPORTED function, launches the smtpdeny daemon.
+Launch the honeypot daemon.
 
-  input:	config hash 	# see rc.spamdeny
+  input:	config hash
   returns:	nothing (exits)
 
 =back
@@ -378,8 +488,9 @@ sub check_run {
 sub check_config {
 # ip-address
   my($c) = @_;;
-  if ($c->{ip_address} && !($laddr = inet_aton($c->{ip_address}))) {
-    bad_config("bad IP address '$c->{ip_address}'");
+  if ($c->{ip_address}) {
+    bad_config("bad IP address '$c->{ip_address}'")
+	unless $laddr = inet_aton($c->{ip_address});
   } else {
     $laddr = Socket::INADDR_ANY;
   }
@@ -409,6 +520,13 @@ sub check_config {
 # hostname
   $hostname		= $c->{hostname} || fqdn();
 # syslog
+  if ($log_facility = $c->{log_facility}) {
+    $log_facility = uc $log_facility;
+    bad_config("invalid log facility '$log_facility'")
+	unless $log_facility =~ /^(?:LOG_KERN|LOG_USER|LOG_MAIL|LOG_DAEMON|LOG_AUTH|LOG_SYSLOG|LOG_LPR|LOG_NEWS|LOG_UUCP|LOG_CRON|LOG_AUTHPRIV|LOG_FTP|LOG_LOCAL0|LOG_LOCAL1|LOG_LOCAL2|LOG_LOCAL3|LOG_LOCAL4|LOG_LOCAL5|LOG_LOCAL6|LOG_LOCAL7)$/;
+  } else {
+    $log_facility = 'LOG_MAIL';
+  }
   if ($syslog = $c->{syslog}) {
     $syslog = uc $syslog;
     bad_config("invalid log request '$syslog'")
@@ -519,6 +637,8 @@ sub daemon {
 
   my $then = time;
   my $sock = open_listenNB($port,$laddr);
+  die "could not open listen socket on port $port\n"
+	unless $sock;
   my $fileno = fileno($sock);
   my $go_listen = $threads->{$fileno} = {
 	sock	=> $sock,
@@ -742,7 +862,7 @@ sub connOK {
   my($fileno) = @_;
   my $tptr = $threads->{$fileno};
   $tptr->{cok} = 1;				# flag that says this is done
-  logit('smtp connect '. $tptr->{name} .'['. $tptr->{ipaddr} .']');
+  logit('honeypot connect '. $tptr->{name} .'['. $tptr->{ipaddr} .']');
   $tptr->{woff} = 0; 
   $tptr->{next} = \&readSMTP;
   $tptr->{tout} = \&write_delay;
@@ -1105,8 +1225,8 @@ sub write_delay {
 
 sub syslog_config {
   if ($syslog && $syslog ne 'STDERR') {
-    openlog($me, LOG_PID(), LOG_MAIL());
-    $LOG = eval "$syslog";			# save LOGlevel for everyone
+    openlog($me, LOG_PID(), eval "$log_facility");
+    $LOG = eval "$syslog";				# save LOGlevel for everyone
     no warnings;
     eval { *closelog = \&_closelog };
   }
@@ -1260,10 +1380,6 @@ sub dns_rcv {		# tested by hand
   connOK($pfno) unless $threads->{$pfno}->{cok};		# log connection, continue
 }
 
-=head1 EXPORT
-
-	run_honeypot
-
 =head1 COPYRIGHT
 
 Copyright 2004 - 2006, Michael Robinton <michael@bizsystems.com>
@@ -1286,6 +1402,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 =head1 AUTHOR
 
 Michael Robinton <michael@bizsystems.com>
+
+=head1 SEE ALSO
+
+L<Mail::SpamCannibal> on CPAN or spamcannibal.org
 
 =cut
 

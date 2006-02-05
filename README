@@ -26,14 +26,14 @@ DESCRIPTION
     sent to the server, the TEMPORARY failure code will simply make the
     sending host retry later -- probably with the lower priority numbered
     host. Meanwhile, the server target by the spam source has its resources
-    consumed by spamdeny.
+    consumed by honeypot.
 
     Honeypot does not spawn children and holds only a small reference to
     each thread that it holds to a client, thus consuming minimal resources.
     It can produce logs useful in analyzing the spam traffic to your site.
     Using it with a detach in CONN mode is adequate for triggering a
     companion spam program such as Mail::SpamCannibal while consuming
-    minimum host resources. At our site, we simply run spamdeny on the same
+    minimum host resources. At our site, we simply run honeypot on the same
     host as our secondary MX but on a different IP address.
 
     Honeypot provides various levels of connection and transaction logging
@@ -43,7 +43,7 @@ DESCRIPTION
     response from the server daemon to slow down the sending client.
 
 CONFIGURATION
-    Edit the rc.spamdeny file to change or set the following:
+    Edit the rc.honeypot.pl file to change or set the following:
 
       my $config = {
 
@@ -75,6 +75,10 @@ CONFIGURATION
       #
       #     port            => 25,
 
+      ## NOTE:      see Concurrent Daemon Operation in the
+      ##            documentation for setup where another
+      ##            mail daemon is running on the same host.
+  
       # specify the response delay after connect or upon
       # receipt of an smtp command from the client
       #
@@ -86,6 +90,17 @@ CONFIGURATION
       #
       #     delay           => 45,
 
+      # syslog facility, one of:
+      #     LOG_KERN LOG_USER LOG_MAIL LOG_DAEMON
+      #     LOG_AUTH LOG_SYSLOG LOG_LPR LOG_NEWS
+      #     LOG_UUCP LOG_CRON LOG_AUTHPRIV LOG_FTP
+      #     LOG_LOCAL0 LOG_LOCAL1 LOG_LOCAL2 LOG_LOCAL3
+      #     LOG_LOCAL4 LOG_LOCAL5 LOG_LOCAL6 LOG_LOCAL7
+      #
+      # You should not need to change this
+      #
+      #     log_facility    => 'LOG_MAIL',
+
       # syslog log level or (none), one of:
       #     STDERR LOG_EMERG LOG_ALERT LOG_CRIT LOG_ERR
       #     LOG_WARNING LOG_NOTICE LOG_INFO LOG_DEBUG
@@ -94,7 +109,7 @@ CONFIGURATION
       #             this and sets the level to STDERR
       # [optional]
       #
-            syslog          => 'LOG_INFO',
+            syslog          => 'LOG_WARNING',
 
       # log verbosity
       #     0 connect only
@@ -141,25 +156,113 @@ CONFIGURATION
 OPERATION
     Launch the daemon with the command:
 
-            rc.spamdeny [-d] [start | stop | restart]
+            rc.honeypot.pl [-d] [start | stop | restart]
 
     The '-d' flag, this overides the config settings and reports logging to
     STDERR
 
-    On some systems it may be necessary to wrap a shell script around spam
-    deny if the path for perl is not in scope during boot.
+    On some systems it may be necessary to wrap a shell script around
+    rc.honeypot.pl if the path for perl is not in scope during boot.
 
       #!/bin/sh
-      /usr/bin/perl $*
+      #
+      # shell script 'rc.honeypot'
+      #
+      /path/to/rc.honeypot.pl $*
+
+    A sample shell script is included in the distribution as rc.honeypot
+
+    NOTE: suggest you test your configuration as follows...
+
+      Set:  verbose => 3,
+            delay   => 5,
+
+      ./rc.honeypot -d start
+
+    Connect to the daemon from a host not on the same subnet and watch the
+    output from daemon to verify proper operation.
+
+    Correct the configuration values and ENJOY!
+
+  Standalone Operation
+
+    For operation on a host where Mail::SMTP::Honeypot is the only SMTP
+    daemon, the default configuration will work for most installations.
+
+  Concurrent Daemon Operation
+
+    To operate Mail::SMTP::Honeypot concurrently with another mail daemon on
+    the same host you must do the following:
+
+    1) add a virtual IP address for the daemon to answer. The IP address in
+    the rc.honeypot.pl config section should be left commented out so that
+    the daemon will bind to INADDR_ANY.
+    In your startup sequence, execute the following: (example for Linux)
+
+      #/bin/sh
+      #
+      # Edit for your setup.
+      NETMASK="255.255.255.0"       # REPLACE with YOUR netmask!
+      NETWORK="5.6.7.0"             # REPLACE with YOUR network address!
+      BROADCAST="5.6.7.255"         # REPLACE with YOUR broadcast address
+      # assign a virtual IP address
+      IPADDR="5.6.7.8"
+
+      # assign ethernet device
+      DEVICE="eth0"                 # REPLACE with your external device
+      LUN="0"
+
+      # Note:       the "real" IP address has no LUN
+      #             virtual IP's are assigned LUN's starting with '0'
+      #
+      # i.e.        host IP = 5.6.7.1       eth0
+      # virtIP      5.6.7.8         LUN 0   eth0:0
+      # virtIP      5.6.7.9         LUN 1   eth0:1
+
+      IFACE=${DEVICE}:${LUN}
+      /sbin/ifconfig ${IFACE} ${IPADDR} broadcast ${BROADCAST} netmask ${NETMASK}
+      /sbin/route add ${IPADDR} dev ${IFACE}
+      echo Configuring $IFACE as $IPADDR
+
+    2) run the honeypot daemon on an unused port.
+    Select a high port number that will not interfere with normail operation
+    of the host SMTP daemon or other services on the host.
+
+      i.e.  in the config section of rc.honeypot.pl
+
+            port    => 10025,
+
+    3) add packet filter rules to redirect queries.
+    This example is for IPTABLES on Linux. Similar rules would apply for
+    other filter packages.
+
+      # allowed chain for TCP connections
+      iptables -N allowed
+      iptables -A allowed -p tcp --syn -j ACCEPT
+      iptables -A allowed -p tcp -m state --state ESTABLISHED,RELATED -j ACCEPT
+      iptables -A allowed -p tcp -j DROP
+
+      # drop all external packets target on honeypot daemon
+      iptables -t nat -A PREROUTING -p tcp -s 0/0 --dport 10025 -j DROP
+      iptables -t nat -A PREROUTING -p tcp -d 5.6.7.8 --dport 25 -j REDIRECT --to-port 10025
+      # alternate DNAT statement
+      # iptables -t nat -a PREROUTING -p tcp -d 5.6.7.8 --dport 25 -j DNAT --to 5.6.7.8:10025
+
+      ## if you are running SpamCannibal, add this rule to capture IP's of connecting hosts
+      ## iptables -A INPUT -p tcp -i eth0 --dport 10025 -j QUEUE
+
+      # allow the internal port to connect
+      iptables -A INPUT -p tcp -s 0/0 --dport 10025 -j allowed
+
+EXPORTS
+    Only one function is exported by Honeypot.pm. This function is called in
+    the rc.honeypot.pl.sample script to launch the honeypot daemon.
 
     * run_honeypot($config); # with @ARGV
-        The only EXPORTED function, launches the smtpdeny daemon.
+        Launch the honeypot daemon.
 
-          input:        config hash     # see rc.spamdeny
+          input:        config hash
           returns:      nothing (exits)
-
-EXPORT
-            run_honeypot
 
 COPYRIGHT
     Copyright 2004 - 2006, Michael Robinton <michael@bizsystems.com>

@@ -5,6 +5,7 @@ Honeypot.pm
 Changes
 GPL
 rc.honeypot.sample
+rc.honeypot.pl.sample
 recurse2txt
 t/do_thread.t
 t/new_rw_sock.t
