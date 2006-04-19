@@ -222,7 +222,7 @@ gotexp(Dumper($tptr),Dumper($exp));
 ## test 12	RSET	clear test 14
 %$exp = %{$bare};
 ${$tp}->{$fileno}->{ipaddr} = '1.2.3.4';
-@{$exp}{qw(domain wargs ipaddr)} = (undef,'250 2.0.0 OK'. $CRLF,'1.2.3.4');
+@{$exp}{qw(domain wargs ipaddr name)} = (undef,'250 2.0.0 OK'. $CRLF,'1.2.3.4','');
 _RSET($fileno,'any garbage at all',$tptr);
 gotexp(Dumper(${$tp}->{$fileno}),Dumper($exp));
 
@@ -287,14 +287,14 @@ gotexp(Dumper($tptr),Dumper($exp));
 my $count = 1;
 ## test 21	line too long
 $tptr = &init;
-@{$tptr}{qw(rargs roff)} = ('', 513);
-@{$exp}{qw(cmdcnt rargs roff wargs)} = ($count++,'',513,'500 5.5.4 Command line too long'. $CRLF);
+@{$tptr}{qw(rargs roff)} = ('Zap', 3);
+@{$exp}{qw(cmdcnt rargs roff wargs)} = ($count++,'Zap',3,'500 5.5.1 Command unrecognized "Zap"'. $CRLF);
 parseSMTP($fileno);
 gotexp(Dumper($tptr),Dumper($exp));
 
 ## test 22	short command
-@{$tptr}{qw(rargs roff)} = ('Zap', 3);
-@{$exp}{qw(cmdcnt rargs roff wargs)} = ($count++,'Zap',3,'500 5.5.1 Command unrecognized "Zap"'. $CRLF);
+@{$tptr}{qw(rargs roff)} = ('HELO', 513);
+@{$exp}{qw(cmdcnt rargs roff wargs)} = ($count++,'HELO',513,'500 5.5.4 Command line too long'. $CRLF);
 parseSMTP($fileno);
 gotexp(Dumper($tptr),Dumper($exp));
 
@@ -396,19 +396,19 @@ foreach (qw(send saml expn turn)) {
 }
 
 ## test 40	DATA
-&next_sec();
+my $now = &next_sec();
 $$ = 1234;			# presets for uniquemsgid
 get_unique(567);
 @{$tptr}{qw(lastc rargs)} = ('RCPT', 'DATA');
 @{$exp}{qw(cmdcnt rargs wargs lastc alarm next)} 
-	= ($count++,'DATA','','RCPT',45,sub {});
+	= ($count++,'DATA','','RCPT',$now,sub {});
 parseSMTP($fileno);
 gotexp(Dumper($tptr),Dumper($exp));
 
 ## test 41	soft_reset	# clear above tests
 $tptr->{wargs} = 'just a plain string';
 %$exp = %{$bare};
-@{$exp}{qw(domain wargs ipaddr)} = ('nobody','just a plain string',$raddr);
+@{$exp}{qw(domain wargs ipaddr name)} = ('nobody','just a plain string',$raddr,$name);
 soft_reset($fileno);
 gotexp(Dumper(${$tp}->{$fileno}),Dumper($exp));
 

@@ -26,7 +26,10 @@ my $config = {
 #	deny		=> 'DATA',
 
 
-# specify the local domain name, defaults to local hostname
+# specify the local domain name, defaults to local hostname.
+# this is probably not what you want if you use virtual IP's
+# and have a real mail client on the same host. so...
+# specify the host 'answerback name' here.
 # [optional]
 #
 #	hostname	=> 'my.host.name.com',
@@ -54,9 +57,9 @@ my $config = {
 #		from the client in this time
 #		period, the smptdeny daemon will
 #		issue a 421 response and disconnect
-# [optional] default 45 seconds
+# [optional] default 10 seconds
 #
-#	delay		=> 45,
+#	delay		=> 10,
 
 # syslog facility, one of:
 #	LOG_KERN LOG_USER LOG_MAIL LOG_DAEMON
@@ -84,6 +87,7 @@ my $config = {
 #	1 + To: & From:
 #	2 + bad commands
 #	3 + trace execution
+#	4 + deep trace with sub names
 # [optional]
 #
 	verbose		=> 0,
@@ -102,7 +106,7 @@ my $config = {
 # timeout for DNS PTR queries
 # [optional] default: use 'delay' above
 #
-#	DNStimeout	=> 45,
+#	DNStimeout	=> 10,
 
 # maximum number of connected clients
 # [optional] default 100

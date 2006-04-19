@@ -1,5 +1,10 @@
 Revision history for Perl extension Wed Feb  1 21:47:48 PST 2006
 
+0.04  Tue Apr 18 15:48:17 PDT 2006
+	fix documentation error run_honeypot typo
+	add deep trace level 4 to show sub names in trace
+	add $SIG{PIPE} = 'IGNORE';
+
 0.03  Sat Feb  4 15:23:34 PST 2006
 	corrected bug in configuration check that alway set the
 	bind address to INADDR_ANY

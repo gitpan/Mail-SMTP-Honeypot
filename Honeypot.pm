@@ -13,7 +13,7 @@ package Mail::SMTP::Honeypot;
 #	Michael
 #
 use strict;
-#use diagnostics;
+use diagnostics;
 #use lib qw(blib lib);
 
 use Data::Dumper;
@@ -72,17 +72,18 @@ require Exporter;
 
 @ISA = qw(Exporter);
 
-$VERSION = do { my @r = (q$Revision: 0.03 $ =~ /\d+/g); sprintf "%d."."%02d" x $#r, @r };
+$VERSION = do { my @r = (q$Revision: 0.04 $ =~ /\d+/g); sprintf "%d."."%02d" x $#r, @r };
 
 @EXPORT = qw(
 	run_honeypot
 );
 
+
 # private file scoped variables
 
 my($me,$threads,$dns,$dnshost,$dnsport,$dnsaddr,$deny,$hostname,$laddr,
    $port,$delay,$config,$syslog,$verbose,$DNStimeout,$maxthreads,$maxcmds,
-   $LOG,$DNSfileno,$disconnect,%Commands,$unique,$log_facility
+   $LOG,$DNSfileno,$disconnect,%Commands,$unique,$log_facility,%subref
 );
 my $CRLF	= "\r\n";
 
@@ -96,7 +97,7 @@ Mail::SMTP::Honeypot -- Dummy mail server
 
   use Mail::SMTP::Honeypot;
 
-  run($config)
+  run_honeypot($config)
 
 =head1 DESCRIPTION
 
@@ -153,7 +154,10 @@ Edit the B<rc.honeypot.pl> file to change or set the following:
   #	deny		=> 'DATA',
 
 
-  # specify the local domain name, defaults to local hostname
+  # specify the local domain name, defaults to local hostname.
+  # this is probably not what you want if you use virtual IP's
+  # and have a real mail client on the same host. so...
+  # specify the host 'answerback name' here.
   # [optional]
   #
   #	hostname	=> 'my.host.name.com',
@@ -181,9 +185,9 @@ Edit the B<rc.honeypot.pl> file to change or set the following:
   #		from the client in this time
   #		period, the smptdeny daemon will
   #		issue a 421 response and disconnect
-  # [optional] default 45 seconds
+  # [optional] default 10 seconds
   #
-  #	delay		=> 45,
+  #	delay		=> 10,
 
   # syslog facility, one of:
   #	LOG_KERN LOG_USER LOG_MAIL LOG_DAEMON
@@ -211,6 +215,7 @@ Edit the B<rc.honeypot.pl> file to change or set the following:
   #	1 + To: & From:
   #	2 + bad commands
   #	3 + trace execution
+  #	4 + deep trace with sub names
   # [optional]
   #
 	verbose		=> 0,
@@ -229,7 +234,7 @@ Edit the B<rc.honeypot.pl> file to change or set the following:
   # timeout for DNS PTR queries
   # [optional] default: use 'delay' above
   #
-  #	DNStimeout	=> 45,
+  #	DNStimeout	=> 10,
 
   # maximum number of connected clients
   # [optional] default 100
@@ -506,7 +511,7 @@ sub check_config {
     bad_config("invalid delay '$delay'")
 	unless vld_num($delay);
   } else {
-    $delay		= 45;
+    $delay		= 10;
   }
 # deny
   if ($deny = $c->{deny}) {
@@ -536,6 +541,15 @@ sub check_config {
   if ($verbose = $c->{verbose}) {
     bad_config("invalid verbosity '$verbose'")
 	unless vld_num($verbose) && $verbose > 0;
+########### DEEP TRACE CODE #############
+    if ($verbose > 3) {
+      foreach(sort keys %Mail::SMTP::Honeypot::) {
+	my $subref = \&{"Mail::SMTP::Honeypot::$_"};
+	$Mail::SMTP::Honeypot::{$_} =~ /[^:]+$/;
+	$subref{$subref} = $&;
+      }
+    }
+########### END DEEP TRACE CODE #############
   } else {
     $verbose = 0;
   }
@@ -620,7 +634,23 @@ sub init_all() {
 }
 
 sub my_dump {
-  logit(Dumper($threads,$dns));
+  my %names;
+  local *pref = __PACKAGE__ . '::';
+  foreach(keys %{*pref}) {
+    $names{'*'.$_} = \&{*pref->{$_}};
+  }
+  my @d = (
+	$threads	=> 'threads',
+	$dns		=> 'dns',
+  );
+  for ($_=0;$_<@d;$_+=2) {
+    my $d = new Data::Dumper([$d[$_]],[$d[$_+1]]);
+    $d->Seen(\%names);
+    @_ = split(/\n/,$d->Dump);
+    foreach(@_) {
+      logit($_ ."\n");
+    }
+  }
 }
 
 sub daemon {
@@ -634,6 +664,7 @@ sub daemon {
   my $run = 1;
   local $SIG{TERM} = sub {$run = 0};
   local $SIG{USR1} = \&my_dump;
+  local $SIG{PIPE} = 'IGNORE';
 
   my $then = time;
   my $sock = open_listenNB($port,$laddr);
@@ -663,26 +694,40 @@ sub daemon {
     }
     elsif ($delta = ($_ = time) - $then) {		# timer = next second or more
       $then = $_;
-      foreach(keys %$threads) {				# each receive thread
+      my @threads = keys %$threads;
+      foreach(@threads) {				# each receive thread
+        next unless exists $threads->{$_};
 	my $tptr = $threads->{$_};
 	if ($tptr->{alarm} &&
 	  ($tptr->{alarm} + $delay) < $then) {
 	  $tptr->{alarm} = time + $disconnect - $delay;
-	  logit(&who ."delay ended for '$_'\n") unless $verbose < 3;
+	  my($logtxt,$go);
 	  if ($tptr->{tout}) {
-	    $tptr->{tout}->($_);			# dispatch
+	    $go = $tptr->{tout};
+	    $logtxt = 'tout ';
 	  } else {
-	    $tptr->{next}->($_);
+	    $go = $tptr->{next};
+	    $logtxt = 'next ';
 	  }
-	  $tptr->{tout} = \&terminate
-		unless $tptr->{tout};
+	  if ($verbose > 3) {			# deep trace
+	    $logtxt = &who ."delay ended for '$_' $logtxt => ".
+		(exists $subref{$go}) ? $subref{$go} : 'sub ref not defined';
+	    logit($logtxt);
+	  }
+	  elsif ($verbose > 2) {
+	    logit(&who ."delay ended for '$_'\n");
+	  }
+	  $go->($_);
+	  if (exists $threads->{$_} && ! $threads->{$_}->{tout}) {
+	    $threads->{$_}->{tout} = \&terminate
+	  }
 	  last;
 	}
       }
       foreach(keys %$dns) {				# each dns thread
 	if ($dns->{$_}->{alarm} &&
 	  ($dns->{$_}->{alarm} + $delay) < $then) {
-	  logit(&who ."dns ended for id $_\n") unless $verbose < 3;
+	  logit(&who ."dns ended for id $_ for $dns->{$_}->{fileno}\n") unless $verbose < 3;
 	  delete $dns->{$_};
 	  last;						# only do one per check for efficiancy
 	}
@@ -703,15 +748,27 @@ sub daemon {
 sub do_thread {		# t => do_thread.t
   my($vec,$op,$sort) = @_;
   logit(&who . $op) unless $verbose < 3;			# trace each thread
-  my @threads = grep(!/\D/,keys %$threads);			# each numeric thread key
-                        # use array in case we decide not to use 'goto' at return of this subr
-  foreach ($sort ? sort {$a <=> $b} @threads : @threads) {	# or if re-entering after read with a deleted thread                            
+  my @threads;		# use array in case we decide not to use 'goto' at return of this subr
+  if ($sort) {
+    @threads = sort {$a <=> $b} grep(!/\D/,keys %$threads);	# each numeric thread key
+  } else {
+    @threads = grep(!/\D/,keys %$threads);
+  }
+  foreach (@threads) {		# or if re-entering after read with a deleted thread                            
     next unless exists $threads->{$_} && $threads->{$_};	# skip killed threads
     next unless vec($vec,$_,1);					# skip inactive threads
-    next unless ref (my $go = $threads->{$_}->{$op});		# ignore blank vectors
+    next unless $threads->{$_}->{$op};
+    my $go = $threads->{$_}->{$op};
     $threads->{$_}->{$op} = undef;				# clear vector
+    next unless ref $go;					# ignore blank vectors
     @_ = ($_);
-    logit(&who ."executing $op for '$_'\n") unless $verbose < 3;
+    if ($verbose > 3) {						# deep trace
+      my $exsub = (exists $subref{$go}) ? $subref{$go} : 'sub ref not found';
+      logit(&who ."exec $op for '$_' => $exsub\n");
+    }
+    elsif ($verbose > 2) {
+      logit(&who ."executing $op for '$_'\n") unless $verbose < 3;
+    }
     goto $go;							# do it and return
   }
 }
@@ -725,12 +782,25 @@ sub writesock {		# t => new_rw_sock.t
 			$tptr->{wargs},
 			$bytes,
 			$tptr->{woff},
-  ) if fileno($tptr->{sock});				# closed filehandles return false
-  logit(&who . $fileno .' '. ((defined $wrote) ? $wrote : 'error '. $!))
-	unless $verbose < 3;
+  	) if fileno($tptr->{sock});			# closed filehandles return false
+  my $logtxt = &who . $fileno .' ';
+  if (defined $wrote) {
+    $logtxt .= $wrote;
+  }
+  else {
+    $logtxt .= 'sock error: '. $!;
+  }
+  logit($logtxt) unless $verbose < 3;
   if (defined $wrote) {
     $tptr->{woff} += $wrote;
-    goto $tptr->{next} if $tptr->{woff} == $bytes;	# next link if complete
+    if ($tptr->{woff} == $bytes) {			# if complete
+      my $go = $tptr->{next};
+      unless ($verbose < 4) {				# deep trace
+	my $exsub = (exists $subref{$go}) ? $subref{$go} : 'sub ref not found';
+	logit(&who ."next => $exsub for '$fileno'\n");
+      }
+      goto $go;						# goto the next link
+    }
   } elsif (sockerror($! || 9)) {			# default to bad file descriptor
     goto &removethread;					# remove thread if there was an error
   }
@@ -757,7 +827,12 @@ sub readsock {		# t => new_rw_sock.t
 	unless $bytes;					# EOF
     $tptr->{alarm} = time;				# renew timeout
     $tptr->{roff} += $bytes;				# bytes read   
-    goto $tptr->{next};
+    my $go = $tptr->{next};
+    unless ($verbose < 4) {				# deep trace
+      my $exsub = (exists $subref{$go}) ? $subref{$go} : 'sub ref not found';
+      logit(&who ."next => $exsub for '$_[0]'\n");
+    }
+    goto $go;
   } elsif (sockerror($! || 9)) {			# default to bad file descriptor
     goto &removethread;					# detected fatal condition
   }
@@ -912,17 +987,23 @@ sub parseSMTP {		# t => parseSMTP.t
   my($fileno) = @_;
   my $tptr = $threads->{$fileno};
   goto &terminate if ++$tptr->{cmdcnt} > $maxcmds;
-  $tptr->{rargs} =~ /^\s*([[:alpha:]]{4})\b/;
-  my $newc = uc $1 || '';
-  my $smtp_args = lc $' || '';
+  my $newc = '';
+  my $smtp_args = '';
+  if ($tptr->{rargs} =~ /^\s*([[:alpha:]]{4})\b/) {
+    $newc = uc $1;
+    $smtp_args = lc $';
+  }
   my $lastc = $tptr->{lastc};
   $tptr->{wargs} = '';					# error text
-  if ($tptr->{roff} > 512) {				# rfc2821 4.5.3.1
-    $tptr->{wargs} = '500 5.5.4 Command line too long';
+  unless ($newc) {
+    $tptr->{rargs} =~ s/[^[\w .-]//g;
+    $tptr->{wargs} = '500 5.5.1 Command unrecognized "'. $tptr->{rargs} .'"';
   }
   elsif (! exists $Commands{$newc}) {
-    $tptr->{rargs} =~ /^\s*(\S+)/;
-    $tptr->{wargs} = '500 5.5.1 Command unrecognized "'. ($1 || '') .'"';
+    $tptr->{wargs} = '500 5.5.1 Command unrecognized "'. $1 .'"';
+  }
+  elsif ($tptr->{roff} > 512) {				# rfc2821 4.5.3.1
+    $tptr->{wargs} = '500 5.5.4 Command line too long';
   }
   elsif ($lastc =~ /(?:CONN|HELO|EHLO)/) {
     if ($newc eq 'RCPT') {
@@ -951,8 +1032,9 @@ sub parseSMTP {		# t => parseSMTP.t
     $tptr->{wargs} .= $CRLF;
     write_rearm($fileno,\&readSMTP);					# send error and return to this routine
   } elsif ($newc eq $deny) {
-    $tptr->{alarm} = $delay;
+    $tptr->{alarm} = time;
     $tptr->{next} = \&terminate;
+    logit(&who .'deny '. $newc . $smtp_args) unless $verbose < 3;
   } else {								# else
     logit(&who . $newc . $smtp_args) unless $verbose < 3;		# trace success
     $Commands{$newc}->($fileno,$smtp_args,$tptr);			# execute the command
@@ -1129,8 +1211,11 @@ sub _QUIT {		# t => commands.t
 #
 #sub _DATA {
 #  my($fileno) = @_;
-#  $threads->{$fileno}->{wargs} = 'GONNA zap you'. $CRLF;
-#  write_rearm($fileno,\&removethread);
+#  my $tptr = $threads->{$fileno};
+#  $tptr->{woff} = 0; 
+#  $tptr->{next} = \&terminate;
+#  $tptr->{tout} = 0;
+#  $tptr->{alarm} = time;			# wait 'delay'
 #}
 
 #
@@ -1147,11 +1232,13 @@ sub soft_reset {        # t => commands.t
   my $tptr = $threads->{$fileno};
   my $wargs = $tptr->{wargs};
   my $ipaddr = $tptr->{ipaddr};
+  my $name = $tptr->{name} || '';
   $tptr = clear_bufs($fileno);
   $tptr->{lastc} = 'CONN';
   $tptr->{proto} = 'SMTP';
   $tptr->{wargs} = $wargs || '554 5.3.5 unknown mailer error'. $CRLF;
   $tptr->{ipaddr} = $ipaddr;
+  $tptr->{name} = $name;
   logit(&who . $tptr->{wargs}) unless $verbose < 2;
   write_rearm($fileno,\&readSMTP);
 }
@@ -1207,9 +1294,9 @@ sub write_rearm {	# t => parseSMTP.t
 sub write_delay {
   my($fileno) = @_;
   my $tptr = $threads->{$fileno};
-  $tptr->{tout} = 0;
+  $tptr->{tout} = \&terminate;
   $tptr->{write} = \&writesock;
-  $tptr->{alarm} = 1;					# no delay
+  $tptr->{alarm} = time;				# kill thread if we can't write
 }
 
 #=item * syslog_config();
@@ -1263,7 +1350,7 @@ sub logit {
 #
 #=cut
 
-sub closelog {
+sub _closelog {
   &Unix::Syslog::closelog
 	if $syslog && $syslog ne 'STDERR';
 }
@@ -1373,9 +1460,10 @@ sub dns_rcv {		# tested by hand
   ($name) = @rdata;
   if ($name) {
     $threads->{$pfno}->{name} = $name .' ';
-    logit(&who ."$fileno rDNS $rdata[0]") unless $verbose < 3;
+    logit(&who ."$pfno rDNS $rdata[0]") unless $verbose < 3;
   } else {
-    logit(&who ."$fileno rDNS missing") unless $verbose < 3;
+    $threads->{$pfno}->{name} = '';
+    logit(&who ."$pfno rDNS missing") unless $verbose < 3;
   }
   connOK($pfno) unless $threads->{$pfno}->{cok};		# log connection, continue
 }
