@@ -1,12 +1,12 @@
 #!/usr/bin/perl
 #
-# rc.honeypot v0.01 1-31-06
+# rc.honeypot v0.02 9-11-06
 # Copyright 2006, Michael Robinton, michael@bizsystems.com
 # See GPL notice in Mail::SMTP::Honeypot
 #
 use strict;
 use Mail::SMTP::Honeypot;
-use warnings;
+local $^W = 1;	# use warnings;
 
 #########################################################
 #     For most unix systems, this should work as is	#
@@ -125,6 +125,6 @@ my $config = {
 
 };
 
-no warnings;
+local $^W = 0; # no warnings;
 
 run_honeypot($config);

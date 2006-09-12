@@ -1,5 +1,9 @@
 Revision history for Perl extension Wed Feb  1 21:47:48 PST 2006
 
+0.05  Mon Sep 11 16:55:20 PDT 2006
+	remove references to 'mkdir' in test programs
+	for compability with perl 5.0503
+
 0.04  Tue Apr 18 15:48:17 PDT 2006
 	fix documentation error run_honeypot typo
 	add deep trace level 4 to show sub names in trace

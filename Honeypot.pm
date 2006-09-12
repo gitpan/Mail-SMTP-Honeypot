@@ -72,7 +72,7 @@ require Exporter;
 
 @ISA = qw(Exporter);
 
-$VERSION = do { my @r = (q$Revision: 0.04 $ =~ /\d+/g); sprintf "%d."."%02d" x $#r, @r };
+$VERSION = do { my @r = (q$Revision: 0.05 $ =~ /\d+/g); sprintf "%d."."%02d" x $#r, @r };
 
 @EXPORT = qw(
 	run_honeypot
@@ -989,7 +989,7 @@ sub parseSMTP {		# t => parseSMTP.t
   goto &terminate if ++$tptr->{cmdcnt} > $maxcmds;
   my $newc = '';
   my $smtp_args = '';
-  if ($tptr->{rargs} =~ /^\s*([[:alpha:]]{4})\b/) {
+  if ($tptr->{rargs} =~ /^\s*([a-zA-Z]{4})\b/) {
     $newc = uc $1;
     $smtp_args = lc $';
   }
@@ -1314,7 +1314,7 @@ sub syslog_config {
   if ($syslog && $syslog ne 'STDERR') {
     openlog($me, LOG_PID(), eval "$log_facility");
     $LOG = eval "$syslog";				# save LOGlevel for everyone
-    no warnings;
+    local $^W = 0; # no warnings;
     eval { *closelog = \&_closelog };
   }
 }
