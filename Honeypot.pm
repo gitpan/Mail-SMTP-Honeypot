@@ -13,7 +13,7 @@ package Mail::SMTP::Honeypot;
 #	Michael
 #
 use strict;
-use diagnostics;
+#use diagnostics;
 #use lib qw(blib lib);
 
 use Data::Dumper;
@@ -72,7 +72,7 @@ require Exporter;
 
 @ISA = qw(Exporter);
 
-$VERSION = do { my @r = (q$Revision: 0.05 $ =~ /\d+/g); sprintf "%d."."%02d" x $#r, @r };
+$VERSION = do { my @r = (q$Revision: 0.06 $ =~ /\d+/g); sprintf "%d."."%02d" x $#r, @r };
 
 @EXPORT = qw(
 	run_honeypot

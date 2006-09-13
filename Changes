@@ -1,5 +1,8 @@
 Revision history for Perl extension Wed Feb  1 21:47:48 PST 2006
 
+0.06  Tue Sep 12 23:23:03 PDT 2006
+	oops! left 'use diagnostics in v0.05';
+
 0.05  Mon Sep 11 16:55:20 PDT 2006
 	remove references to 'mkdir' in test programs
 	for compability with perl 5.0503
