@@ -175,6 +175,9 @@ gotexp(Dumper($tptr),Dumper($exp));
 
 next_sec();
 ## test 9	MAIL, fail -- no user domain
+# in the interest of sandbox programs being happy
+local $$;
+
 $$ = 1234;		# presets for uniquemsgid
 get_unique(567);
 my $msgid = uniquemsgid();

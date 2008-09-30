@@ -1,5 +1,9 @@
 Revision history for Perl extension Wed Feb  1 21:47:48 PST 2006
 
+0.07  Tue Sep 30 16:02:18 PDT 2008
+	parseSMTP.t fails in the sandbox because of global modification
+	to $$. Change to "local $$".
+
 0.06  Tue Sep 12 23:23:03 PDT 2006
 	oops! left 'use diagnostics in v0.05';
 
