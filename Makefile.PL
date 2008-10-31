@@ -11,8 +11,8 @@ my $module = $& .'.pm';
 my %makeparms = (
     'NAME'		=> $pkg,
     'VERSION_FROM'	=> $module, # finds $VERSION
-    'PREREQ_PM'		=> {	Net::DNS::Codes		=> 0.08,
-				Net::DNS::ToolKit	=> 0.24,
+    'PREREQ_PM'		=> {	Net::DNS::Codes		=> 0.09,
+				Net::DNS::ToolKit	=> 0.41,
 				Unix::Syslog		=> 0.97,
 				Net::NBsocket		=> 0.12,
 				Proc::PidUtil		=> 0.07,
