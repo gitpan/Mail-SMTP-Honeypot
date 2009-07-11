@@ -14,7 +14,7 @@ my %makeparms = (
     'PREREQ_PM'		=> {	Net::DNS::Codes		=> 0.09,
 				Net::DNS::ToolKit	=> 0.41,
 				Unix::Syslog		=> 0.97,
-				Net::NBsocket		=> 0.12,
+				Net::NBsocket		=> 0.15,
 				Proc::PidUtil		=> 0.07,
 				Sys::Hostname::FQDN	=> 0.07,
 			},

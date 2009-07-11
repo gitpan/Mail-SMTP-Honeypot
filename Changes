@@ -1,5 +1,9 @@
 Revision history for Perl extension Wed Feb  1 21:47:48 PST 2006
 
+0.09  Sat Jul 11 12:03:08 PDT 2009
+	This package requires Net::NBsocket-0.15 to accomodate "goto"
+	bug in perl version 5.8.0 thru 5.8.5
+
 0.08  Wed Oct 15 14:19:29 PDT 2008
 	require Net::DNS::ToolKit version 0.41 or higher
 
