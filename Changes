@@ -1,5 +1,8 @@
 Revision history for Perl extension Wed Feb  1 21:47:48 PST 2006
 
+0.10  Sat Nov 10 17:58:54 PST 2012
+	sub closelog was missing when syslog = STDERR
+
 0.09  Sat Jul 11 12:03:08 PDT 2009
 	This package requires Net::NBsocket-0.15 to accomodate "goto"
 	bug in perl version 5.8.0 thru 5.8.5

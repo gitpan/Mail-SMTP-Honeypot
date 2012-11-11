@@ -72,7 +72,7 @@ require Exporter;
 
 @ISA = qw(Exporter);
 
-$VERSION = do { my @r = (q$Revision: 0.09 $ =~ /\d+/g); sprintf "%d."."%02d" x $#r, @r };
+$VERSION = do { my @r = (q$Revision: 0.10 $ =~ /\d+/g); sprintf "%d."."%02d" x $#r, @r };
 
 @EXPORT = qw(
 	run_honeypot
@@ -1314,8 +1314,6 @@ sub syslog_config {
   if ($syslog && $syslog ne 'STDERR') {
     openlog($me, LOG_PID(), eval "$log_facility");
     $LOG = eval "$syslog";				# save LOGlevel for everyone
-    local $^W = 0; # no warnings;
-    eval { *closelog = \&_closelog };
   }
 }
 
@@ -1350,7 +1348,8 @@ sub logit {
 #
 #=cut
 
-sub _closelog {
+sub closelog {
+  local $^W = 0; # no warnings;
   &Unix::Syslog::closelog
 	if $syslog && $syslog ne 'STDERR';
 }
