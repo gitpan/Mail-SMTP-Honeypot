@@ -72,7 +72,7 @@ require Exporter;
 
 @ISA = qw(Exporter);
 
-$VERSION = do { my @r = (q$Revision: 0.10 $ =~ /\d+/g); sprintf "%d."."%02d" x $#r, @r };
+$VERSION = do { my @r = (q$Revision: 0.11 $ =~ /\d+/g); sprintf "%d."."%02d" x $#r, @r };
 
 @EXPORT = qw(
 	run_honeypot
@@ -1469,7 +1469,7 @@ sub dns_rcv {		# tested by hand
 
 =head1 COPYRIGHT
 
-Copyright 2004 - 2006, Michael Robinton <michael@bizsystems.com>
+Copyright 2004 - 2014, Michael Robinton <michael@bizsystems.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License (except as noted

@@ -1,5 +1,8 @@
 Revision history for Perl extension Wed Feb  1 21:47:48 PST 2006
 
+0.11  Mon Jan 27 12:47:58 PST 2014
+        correct typo in Makefile.pm
+
 0.10  Sat Nov 10 17:58:54 PST 2012
 	sub closelog was missing when syslog = STDERR
 
